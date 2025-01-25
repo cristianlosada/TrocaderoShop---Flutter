@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 // import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:trocadero_shop/core/constants/app_routes.dart';
+import 'package:trocadero_shop/core/utils/funtions.dart';
 import '../common/location_picker_screen.dart'; // Importa la pantalla de selección de ubicación
 
 class RegisterScreen extends StatefulWidget {
@@ -52,9 +54,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
           if (_isCompany) 'direccion': _selectedAddress,
         });
 
+        // Enviar el correo de verificación
+        try {
+          await userCredential.user?.sendEmailVerification();
+          Functions().showSuccessSnackBar(context,
+              message: 'Correo de verificación enviado a ${_emailController.text}.');
+        } catch (e) {
+          Functions().showErrorSnackBar(context,
+              message: 'Error al enviar el correo de verificación: ${e.toString()}');
+        }
+
         if (mounted) {
-          Navigator.pushReplacementNamed(
-              context, _isCompany ? '/empresa_home' : '/persona_home');
+          Navigator.pushReplacementNamed(context, AppRoutes.authWrapper);
+          // Navigator.pushReplacementNamed(
+          //     context, _isCompany ? '/empresa_home' : '/persona_home');
         }
       } on FirebaseAuthException catch (e) {
         if (e.code == 'email-already-in-use') {

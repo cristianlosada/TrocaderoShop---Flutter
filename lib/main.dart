@@ -6,6 +6,7 @@ import 'package:trocadero_shop/core/constants/app_routes.dart';
 import 'package:trocadero_shop/core/utils/funtions.dart';
 import 'package:trocadero_shop/presentation/screens/auth/login_screen.dart';
 import 'package:trocadero_shop/presentation/screens/auth/register_screen.dart';
+import 'package:trocadero_shop/presentation/screens/auth/verify_email_screen.dart';
 import 'package:trocadero_shop/presentation/screens/navigation/personas.dart';
 import 'package:trocadero_shop/presentation/screens/navigation/empresas.dart';
 import 'package:provider/provider.dart';
@@ -67,6 +68,12 @@ class AuthWrapper extends StatelessWidget {
         }
 
         if (snapshot.hasData) {
+          final User user = snapshot.data!;
+          // Verificar si el correo está validado
+          if (!user.emailVerified) {
+            // Redirigir a la pantalla de verificación de correo
+            return VerifyEmailScreen(user: user);
+          }
           // Usuario autenticado con Firebase
           final String userId = snapshot.data!.uid;
           return FutureBuilder<DocumentSnapshot>(
