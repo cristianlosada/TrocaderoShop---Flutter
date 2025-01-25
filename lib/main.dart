@@ -111,11 +111,6 @@ class AuthWrapper extends StatelessWidget {
                         }
                       }
                       Functions().showErrorSnackBar(context, message: message);
-                      // WidgetsBinding.instance.addPostFrameCallback((_) {
-                      //   ScaffoldMessenger.of(context).showSnackBar(
-                      //     SnackBar(content: Text(message)),
-                      //   );
-                      // });
                     }
 
                     // Manejo de errores inesperados
