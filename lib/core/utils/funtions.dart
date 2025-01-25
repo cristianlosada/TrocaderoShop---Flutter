@@ -16,4 +16,34 @@ class Functions {
       return valueMoney;
     }
   }
+
+  Future<void> showImage(BuildContext context,
+      {required String imgPath}) async {
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        content: Image.network(imgPath, fit: BoxFit.cover),
+      ),
+    );
+  }
+
+  Future<void> showErrorSnackBar(BuildContext context,
+      {required String message}) async {
+    await ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  Future<void> showSuccessSnackBar(BuildContext context,
+      {required String message}) async {
+    await ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
 }

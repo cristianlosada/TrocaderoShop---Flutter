@@ -2,24 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:firebase_app_check/firebase_app_check.dart';
-// import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:trocadero_shop/core/constants/app_routes.dart';
+import 'package:trocadero_shop/core/utils/funtions.dart';
 import 'package:trocadero_shop/presentation/screens/auth/login_screen.dart';
 import 'package:trocadero_shop/presentation/screens/auth/register_screen.dart';
 import 'package:trocadero_shop/presentation/screens/navigation/personas.dart';
 import 'package:trocadero_shop/presentation/screens/navigation/empresas.dart';
-
 import 'package:provider/provider.dart';
 import 'package:trocadero_shop/presentation/screens/navigation/cart/cart_provider.dart';
+import 'package:trocadero_shop/core/utils/biometric_auth.dart'; // Clase para la autenticación biométrica
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  // await FirebaseAppCheck.instance.activate(
-  //   androidProvider: AndroidProvider.playIntegrity, // Usa SafetyNet si no tienes Play Integrity.
-  // );
-  // await FirebaseAppCheck.instance.activate(webRecaptchaSiteKey: 'test-site-key');
   runApp(MultiProvider(
     providers: [
       ChangeNotifierProvider(create: (_) => CartProvider()),
@@ -58,7 +53,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Ruta para verificar el estado de autenticación
+// Modificación del AuthWrapper para incluir autenticación biométrica
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
@@ -72,7 +67,7 @@ class AuthWrapper extends StatelessWidget {
         }
 
         if (snapshot.hasData) {
-          // Aquí puedes obtener el tipo de usuario desde Firestore
+          // Usuario autenticado con Firebase
           final String userId = snapshot.data!.uid;
           return FutureBuilder<DocumentSnapshot>(
             future: FirebaseFirestore.instance
@@ -83,35 +78,58 @@ class AuthWrapper extends StatelessWidget {
               if (userSnapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
+
               if (userSnapshot.hasData) {
                 final userData =
                     userSnapshot.data!.data() as Map<String, dynamic>;
                 final String userType = userData['tipo_usuario'] ?? 'persona';
 
-                if (userType == 'persona') {
-                  return const Personas();
-                } else if (userType == 'empresa') {
-                  return const Empresas();
-                }
+                return FutureBuilder<List>(
+                  future: BiometricAuth().authenticateWithBiometrics(),
+                  builder: (context, biometricSnapshot) {
+                    if (biometricSnapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    // Verificar si los datos están disponibles y si no hay error
+                    if (biometricSnapshot.hasError) {
+                      return Center(
+                          child: Text('Error: ${biometricSnapshot.error}'));
+                    }
+
+                    if (biometricSnapshot.hasData) {
+                      // Verifica que los datos sean una lista válida
+                      List<dynamic> result = biometricSnapshot.data!;
+                      bool isAuthenticated = result[0];
+                      String message = result[1];
+                      if (isAuthenticated == true) {
+                        // Si la autenticación biométrica fue exitosa
+                        if (userType == 'persona') {
+                          return const Personas();
+                        } else if (userType == 'empresa') {
+                          return const Empresas();
+                        }
+                      }
+                      Functions().showErrorSnackBar(context, message: message);
+                      // WidgetsBinding.instance.addPostFrameCallback((_) {
+                      //   ScaffoldMessenger.of(context).showSnackBar(
+                      //     SnackBar(content: Text(message)),
+                      //   );
+                      // });
+                    }
+
+                    // Manejo de errores inesperados
+                    return const LoginScreen();
+                  },
+                );
               }
-
-              // Manejo de alguna actividad cuando no se puede iniciar sesion
-              // ScaffoldMessenger.of(context).showSnackBar(
-              //   SnackBar(
-              //     content: Text('ha sucedido algo al iniciar sesion $userId')),
-              // );
-
-              // En caso de que el usuario no exista en Firestore o haya un error
+              // En caso de error al obtener el usuario desde Firestore
               return const LoginScreen();
             },
           );
         }
 
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   const SnackBar(content: Text('ha sucedido algo al iniciar sesion')),
-        // );
-
-        // Si no hay usuario autenticado
+        // Si no hay usuario autenticado en Firebase
         return const LoginScreen();
       },
     );
