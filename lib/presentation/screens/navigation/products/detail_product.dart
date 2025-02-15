@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -6,208 +7,249 @@ import '../../../widgets/detail_image_widget.dart';
 import '../cart/cart_provider.dart';
 import '../cart/cart_screen.dart';
 
-class ProductDetailScreen extends StatefulWidget {
+class ProductDetailScreen extends StatelessWidget {
   final String productId;
 
   const ProductDetailScreen({super.key, required this.productId});
-
-  @override
-  ProductDetailScreenState createState() => ProductDetailScreenState();
-}
-
-class ProductDetailScreenState extends State<ProductDetailScreen> {
-  final _productsCollection =
-      FirebaseFirestore.instance.collection('productos');
-  final _usuariosCollection = FirebaseFirestore.instance.collection('usuarios');
-
-  Future<Map<String, dynamic>> _fetchCompanyName(String userId) async {
-    final userDoc = await _usuariosCollection.doc(userId).get();
-    if (userDoc.exists) {
-      return userDoc.data() as Map<String, dynamic>;
-    }
-    return {'nombreEmpresa': 'Desconocido'};
-  }
 
   @override
   Widget build(BuildContext context) {
     final cart = Provider.of<CartProvider>(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Detalles del Producto',
-          style: TextStyle(color: Colors.white),
-        ),
-        actions: [
-          IconButton(
-            icon: Stack(
-              children: [
-                const Icon(Icons.shopping_cart),
-                if (cart.itemCount > 0)
-                  Positioned(
-                    right: 0,
-                    child: CircleAvatar(
-                      radius: 10,
-                      backgroundColor: Colors.red,
-                      child: Text(
-                        cart.itemCount.toString(),
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.white),
-                      ),
+      appBar: _buildAppBar(context, cart),
+      body: FutureProvider<DocumentSnapshot?>(
+        create: (_) => _fetchProduct(productId),
+        initialData: null,
+        catchError: (_, __) => null,
+        child: Consumer<DocumentSnapshot?>(
+          builder: (context, snapshot, _) {
+            if (snapshot == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (!snapshot.exists) {
+              return const Center(child: Text('Producto no encontrado'));
+            }
+
+            final productData = snapshot.data() as Map<String, dynamic>;
+            final userId = productData['empresaId'] ?? '';
+
+            return FutureProvider<Map<String, dynamic>>(
+              create: (_) => _fetchCompanyName(userId),
+              initialData: const {'nombre_empresa': 'Desconocido'},
+              child: Consumer<Map<String, dynamic>>(
+                builder: (context, companyData, _) {
+                  final companyName =
+                      companyData['nombre_empresa'] ?? 'Desconocido';
+
+                  // ✅ Manejo de imágenes
+                  List<String> images = [];
+                  if (productData['imageUrl'] is String) {
+                    images = [productData['imageUrl']];
+                  } else if (productData['imageUrl'] is List) {
+                    images = List<String>.from(productData['imageUrl']);
+                  }
+
+                  // ✅ Extraer `fields` del producto
+                  Map<String, dynamic> additionalFields =
+                      productData['additionalFields'] ?? {};
+
+                  return Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ListView(
+                      children: [
+                        _buildImageCarousel(images, productData),
+                        const SizedBox(height: 20),
+                        _buildProductInfo(productData, companyName),
+                        const SizedBox(height: 20),
+                        _buildAdditionalFields(
+                            additionalFields), // ✅ Mostrar `fields`
+                        const SizedBox(height: 20),
+                        _buildPrice(productData),
+                        const SizedBox(height: 20),
+                        _buildAddToCartButton(
+                            context, productData, cart, companyName),
+                      ],
                     ),
-                  ),
-              ],
-            ),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const CartScreen()),
-              );
-            },
-          ),
-        ],
-        iconTheme: const IconThemeData(color: Colors.white),
-        backgroundColor: const Color(0xFF643CB0),
+                  );
+                },
+              ),
+            );
+          },
+        ),
       ),
-      body: FutureBuilder<DocumentSnapshot>(
-        future: _productsCollection.doc(widget.productId).get(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    );
+  }
 
-          if (snapshot.hasError) {
-            return const Center(
-                child: Text('Error al cargar los detalles del producto'));
-          }
+  // 🔹 Obtiene el tipo de usuario actual
+  Future<DocumentSnapshot?> _fetchUserType() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return null;
+    return FirebaseFirestore.instance.collection('usuarios').doc(userId).get();
+  }
 
-          if (!snapshot.hasData || !snapshot.data!.exists) {
-            return const Center(child: Text('Producto no encontrado'));
-          }
-
-          final productData = snapshot.data!.data() as Map<String, dynamic>;
-          List<String> images =
-              List<String>.from(productData['iamgeUrl'] ?? []);
-          final userId = productData[
-              'empresaId']; // Asegúrate de tener este campo en tus datos
-
-          return FutureBuilder<Map<String, dynamic>>(
-            future: _fetchCompanyName(userId),
-            builder: (context, companySnapshot) {
-              if (companySnapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              final companyData =
-                  companySnapshot.data ?? {'nombreEmpresa': 'Desconocido'};
-              final companyName = companyData['nombre_empresa'];
-
-              return Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        height: 250,
-                        child: PageView.builder(
-                          itemCount: images.isEmpty ? 1 : images.length,
-                          itemBuilder: (context, index) {
-                            if (productData['imageUrl'] == null) {
-                              return Image.asset(
-                                'images/assets/LogoTrocadero.png',
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                              );
-                            }
-                            return DetailImageWidget(
-                              imagePath: productData['imageUrl'],
-                            );
-                            // Image.network(
-                            //   images[index],
-                            //   fit: BoxFit.cover,
-                            //   width: double.infinity,
-                            // );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        productData['nombre'] ?? 'Sin nombre',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 24),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        productData['descripcion'] ??
-                            'Descripción no disponible',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Vendido por: $companyName',
-                        style: const TextStyle(
-                            fontSize: 16, fontStyle: FontStyle.italic),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        productData['precio'] != null
-                            ? Functions().formatMoney(
-                                valueMoney: productData['precio'].toString())
-                            : 'Precio no disponible',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 20,
-                          color: Colors.purple,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (productData['nombre'] == null ||
-                              productData['precio'] == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'Error: Datos del producto no válidos'),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                            return;
-                          }
-
-                          cart.addItem(
-                            widget.productId,
-                            productData['nombre'],
-                            productData['precio'],
-                            companyName, // Añadimos el nombre de la empresa al carrito
-                          );
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                  '${productData['nombre']} añadido al carrito'),
-                              duration: const Duration(seconds: 2),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF643CB9)),
-                        child: const Text(
-                          'Agregar al Carrito',
-                          style: TextStyle(
-                              color: Colors.white,
-                              backgroundColor: Color(0xFF643CB9),
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
+  // 🔹 AppBar con carrito
+  AppBar _buildAppBar(BuildContext context, CartProvider cart) {
+    return AppBar(
+      title: const Text('Detalles del Producto',
+          style: TextStyle(color: Colors.white)),
+      actions: [
+        IconButton(
+          icon: Stack(
+            children: [
+              const Icon(Icons.shopping_cart),
+              if (cart.itemCount > 0)
+                Positioned(
+                  right: 0,
+                  child: CircleAvatar(
+                    radius: 10,
+                    backgroundColor: Colors.red,
+                    child: Text(cart.itemCount.toString(),
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.white)),
                   ),
                 ),
-              );
-            },
-          );
+            ],
+          ),
+          onPressed: () {
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const CartScreen()));
+          },
+        ),
+      ],
+      iconTheme: const IconThemeData(color: Colors.white),
+      backgroundColor: const Color(0xFF643CB0),
+    );
+  }
+
+  // 🔹 Carrusel de imágenes
+  Widget _buildImageCarousel(
+      List<String> images, Map<String, dynamic> productData) {
+    return SizedBox(
+      height: 250,
+      child: PageView.builder(
+        itemCount: images.isNotEmpty ? images.length : 1,
+        itemBuilder: (context, index) {
+          return images.isNotEmpty
+              ? DetailImageWidget(imagePath: images[index])
+              : Image.asset('images/assets/LogoTrocadero.png',
+                  fit: BoxFit.cover, width: double.infinity);
         },
       ),
     );
+  }
+
+  // 🔹 Información del producto
+  Widget _buildProductInfo(
+      Map<String, dynamic> productData, String companyName) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          productData['nombre'] ?? 'Sin nombre',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          productData['descripcion'] ?? 'Descripción no disponible',
+          style: const TextStyle(fontSize: 16),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Vendido por: $companyName',
+          style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+        ),
+      ],
+    );
+  }
+
+  // 🔹 Mostrar precio
+  Widget _buildPrice(Map<String, dynamic> productData) {
+    return Text(
+      productData['precio'] != null
+          ? Functions()
+              .formatMoney(valueMoney: productData['precio'].toString())
+          : 'Precio no disponible',
+      style: const TextStyle(
+          fontWeight: FontWeight.bold, fontSize: 20, color: Colors.purple),
+    );
+  }
+
+  // 🔹 Mostrar campos adicionales (`fields`)
+  Widget _buildAdditionalFields(Map<String, dynamic> additionalFields) {
+    if (additionalFields.isEmpty) {
+      return const SizedBox(); // ✅ Si no hay campos, no mostrar nada
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: additionalFields.entries.map((entry) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(
+            '${entry.key}: ${entry.value}',
+            style: const TextStyle(fontSize: 16, color: Colors.black54),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // 🔹 Botón para agregar al carrito (Restringido para empresas)
+  Widget _buildAddToCartButton(BuildContext context,
+      Map<String, dynamic> productData, CartProvider cart, String companyName) {
+    return ElevatedButton(
+      onPressed: () {
+        if (productData['nombre'] == null || productData['precio'] == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Error: Datos del producto no válidos'),
+                duration: Duration(seconds: 2)),
+          );
+          return;
+        }
+
+        cart.addItem(productId, productData['nombre'], productData['precio'],
+            companyName);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('${productData['nombre']} añadido al carrito'),
+              duration: const Duration(seconds: 2)),
+        );
+      },
+      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF643CB9)),
+      child: const Text('Agregar al Carrito',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  // 🔹 Función para obtener detalles del producto
+  Future<DocumentSnapshot?> _fetchProduct(String productId) async {
+    try {
+      return await FirebaseFirestore.instance
+          .collection('productos')
+          .doc(productId)
+          .get();
+    } catch (e) {
+      debugPrint("Error al obtener el producto: $e");
+      return null;
+    }
+  }
+
+  // 🔹 Función para obtener la empresa del vendedor
+  Future<Map<String, dynamic>> _fetchCompanyName(String userId) async {
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(userId)
+          .get();
+      return userDoc.exists
+          ? userDoc.data() as Map<String, dynamic>
+          : {'nombre_empresa': 'Desconocido'};
+    } catch (e) {
+      debugPrint("Error al obtener datos de la empresa: $e");
+      return {'nombre_empresa': 'Desconocido'};
+    }
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class Functions {
   String formatMoney({required String valueMoney}) {
@@ -43,6 +44,24 @@ class Functions {
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  Widget svgAvatar({
+    required String routeIcon, // Debe ser una ruta del asset
+    double size = 60,
+    Color? bgColor,
+  }) {
+    return CircleAvatar(
+      radius: size / 2,
+      backgroundColor: bgColor ?? Colors.grey.shade200,
+      child: SvgPicture.asset(
+        routeIcon, // Ruta del SVG en assets
+        width: size * 0.6,
+        height: size * 0.6,
+        colorFilter: const ColorFilter.mode(
+            Color(0xFF643CB9), BlendMode.srcIn), // Cambia el color
       ),
     );
   }

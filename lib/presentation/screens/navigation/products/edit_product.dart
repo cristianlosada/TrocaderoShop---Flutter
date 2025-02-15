@@ -20,224 +20,222 @@ class EditProductScreenState extends State<EditProductScreen> {
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _descripcionController = TextEditingController();
   final TextEditingController _precioController = TextEditingController();
-  final ImagePicker _picker = ImagePicker(); // accede a la imagen
+  final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
   File? _imageFile;
+
+  // Mapa de controladores para los campos dinámicos
+  Map<String, TextEditingController> _dynamicFieldControllers = {};
+  Map<String, dynamic> _additionalFields = {};
 
   @override
   void initState() {
     super.initState();
 
-    // Inicializa los controladores con los valores actuales
+    // Cargar datos en los controladores
     _nombreController.text = widget.productData['nombre'] ?? '';
     _descripcionController.text = widget.productData['descripcion'] ?? '';
     _precioController.text = widget.productData['precio']?.toString() ?? '';
+
+    // Cargar `additionalFields` si existen
+    _additionalFields = widget.productData['additionalFields'] ?? {};
+    _initializeDynamicFieldControllers();
+  }
+
+  // Inicializa los controladores para los campos dinámicos
+  void _initializeDynamicFieldControllers() {
+    _additionalFields.forEach((key, value) {
+      _dynamicFieldControllers[key] =
+          TextEditingController(text: value.toString());
+    });
   }
 
   // Selecciona una imagen
   Future<void> _pickImage() async {
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
+      setState(() => _imageFile = File(pickedFile.path));
     }
   }
 
   // Sube la imagen a Firebase Storage y obtiene la URL
   Future<String?> _uploadImage(File image) async {
     try {
-      // Referencia única para cada archivo subido
       final ref = FirebaseStorage.instance
           .ref()
           .child('product_images')
           .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-      // Sube el archivo
       await ref.putFile(image);
-
-      // Obtén la URL del archivo subido
       return await ref.getDownloadURL();
     } catch (e) {
-      print("Error al subir la imagen: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al subir la imagen: ${e.toString()}')),
-        );
-      }
+      debugPrint("Error al subir la imagen: $e");
       return null;
     }
   }
 
-  Future<void> listFiles() async {
+  // Actualiza los datos del producto en Firestore
+  Future<void> _submitProduct() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    String? imageUrl;
+    if (_imageFile != null) {
+      imageUrl = await _uploadImage(_imageFile!);
+    }
+
+    // Recoger los valores actualizados de los campos dinámicos
+    Map<String, dynamic> updatedFields = {};
+    _dynamicFieldControllers.forEach((key, controller) {
+      updatedFields[key] = controller.text;
+    });
+
     try {
-      print('inicio');
-      final ref = FirebaseStorage.instance.ref().child('product_images');
-      print(ref);
-      final listResult = await ref.listAll();
-      for (var item in listResult.items) {
-        print('Archivo encontrado: ${item.name}');
+      await FirebaseFirestore.instance
+          .collection('productos')
+          .doc(widget.productId)
+          .update({
+        'nombre': _nombreController.text,
+        'descripcion': _descripcionController.text,
+        'precio': double.tryParse(_precioController.text) ?? 0,
+        'imageUrl': imageUrl ?? widget.productData['imageUrl'],
+        'additionalFields': updatedFields, // ✅ Actualiza los campos dinámicos
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Producto actualizado con éxito')));
+        Navigator.pop(context);
       }
     } catch (e) {
-      print('Error al listar archivos: $e');
-    }
-  }
-
-  // Envia los datos del producto a Firestore
-  Future<void> _submitProduct() async {
-    if (_formKey.currentState?.validate() ?? false) {
-      setState(() => _isLoading = true);
-
-      String? imageUrl;
-
-      // Subir imagen si existe una seleccionada
-      if (_imageFile != null) {
-        imageUrl = null;
-        imageUrl = await _uploadImage(_imageFile!);
+      debugPrint("Error al actualizar producto: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al actualizar producto: $e')));
       }
-
-      // await listFiles();
-      // Verificar si la URL de la imagen es válida
-      if (imageUrl != null || _imageFile == null) {
-        try {
-          // Actualizar los datos en Firestore
-          await FirebaseFirestore.instance
-              .collection('productos')
-              .doc(widget.productId)
-              .update({
-            'nombre': _nombreController.text,
-            'descripcion': _descripcionController.text,
-            'precio': double.tryParse(_precioController.text) ?? 0,
-            'imageUrl': imageUrl ?? widget.productData['imageUrl'],
-          });
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Producto actualizado con éxito')),
-            );
-
-            Navigator.pop(context); // Regresa a la vista anterior
-          }
-        } catch (e) {
-          print("Error al actualizar producto: $e");
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error al actualizar producto: $e')),
-            );
-          }
-        }
-      }
-
-      setState(() => _isLoading = false);
     }
+
+    setState(() => _isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Editar Producto',
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: const Color(0xFF643CB9),
-        iconTheme: const IconThemeData(
-          color: Colors.white, // Color blanco para el ícono de retroceso
-        ),
-      ),
+      appBar: _buildAppBar(),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: ListView(
             children: [
-              // Imagen del producto
-              GestureDetector(
-                onTap: _pickImage,
-                child: Container(
-                  height: 150,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey.shade400),
-                  ),
-                  child: _imageFile != null
-                      ? Image.file(_imageFile!, fit: BoxFit.cover)
-                      : const Center(child: Text('Seleccionar Imagen')),
-                ),
-              ),
+              _buildImagePicker(),
               const SizedBox(height: 10),
-              // Campo de texto para el nombre
-              TextFormField(
-                controller: _nombreController,
-                decoration: InputDecoration(
-                  labelText: 'Nombre del Producto',
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                validator: (value) =>
-                    value == null || value.isEmpty ? 'Requerido' : null,
-              ),
+              _buildTextField(
+                  controller: _nombreController, label: 'Nombre del Producto'),
               const SizedBox(height: 10),
-
-              // Campo de texto para la descripción
-              TextFormField(
-                controller: _descripcionController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: 'Descripción',
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                validator: (value) =>
-                    value == null || value.isEmpty ? 'Requerido' : null,
-              ),
+              _buildTextField(
+                  controller: _descripcionController,
+                  label: 'Descripción',
+                  maxLines: 3),
               const SizedBox(height: 10),
-
-              // Campo de texto para el precio
-              TextFormField(
-                controller: _precioController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Precio',
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                validator: (value) =>
-                    value == null || value.isEmpty ? 'Requerido' : null,
-              ),
+              _buildTextField(
+                  controller: _precioController,
+                  label: 'Precio',
+                  keyboardType: TextInputType.number),
+              const SizedBox(height: 10),
+              _buildDynamicFields(), // ✅ Campos adicionales dinámicos
               const SizedBox(height: 20),
-
-              // Botón para guardar cambios
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : ElevatedButton(
-                      onPressed: _submitProduct,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF643CB4),
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: const Text(
-                        'Guardar Cambios',
-                        style: TextStyle(fontSize: 16, color: Colors.white),
-                      ),
-                    ),
+                  : _buildSubmitButton(),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  // 🔹 AppBar
+  AppBar _buildAppBar() {
+    return AppBar(
+      title:
+          const Text('Editar Producto', style: TextStyle(color: Colors.white)),
+      backgroundColor: const Color(0xFF643CB9),
+      iconTheme: const IconThemeData(color: Colors.white),
+    );
+  }
+
+  // 🔹 Widget para seleccionar imagen
+  Widget _buildImagePicker() {
+    return GestureDetector(
+      onTap: _pickImage,
+      child: Container(
+        height: 150,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.shade400),
+        ),
+        child: _imageFile != null
+            ? Image.file(_imageFile!, fit: BoxFit.cover)
+            : widget.productData['imageUrl'] != null
+                ? Image.network(widget.productData['imageUrl'],
+                    fit: BoxFit.cover)
+                : const Center(child: Text('Seleccionar Imagen')),
+      ),
+    );
+  }
+
+  // 🔹 Campos de texto reutilizables
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    int maxLines = 1,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
+    );
+  }
+
+  // 🔹 Genera los campos adicionales dinámicamente
+  Widget _buildDynamicFields() {
+    if (_dynamicFieldControllers.isEmpty) return const SizedBox();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: _dynamicFieldControllers.entries.map((entry) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: TextFormField(
+            controller: entry.value,
+            decoration: InputDecoration(
+              labelText: entry.key,
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // 🔹 Botón para guardar cambios
+  Widget _buildSubmitButton() {
+    return ElevatedButton(
+      onPressed: _submitProduct,
+      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF643CB9)),
+      child: const Text('Guardar Cambios',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
     );
   }
 }

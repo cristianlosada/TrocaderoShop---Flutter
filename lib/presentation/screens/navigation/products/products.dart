@@ -17,41 +17,30 @@ class AddProductScreenState extends State<ProductsScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
-  String? _selectedCategoryId; // Variable para almacenar el ID de la categoría seleccionada
-  List<Map<String, String>> _categories = []; // Lista de categorías con ID y nombre
+
+  String? _selectedCategoryId;
   File? _imageFile;
   bool _isLoading = false;
-
   final ImagePicker _picker = ImagePicker();
 
+  // Mapa de controladores dinámicos para los campos según la categoría
+  final Map<String, TextEditingController> _dynamicFields = {};
+  Map<String, dynamic> _categoryFields = {};
+
   @override
-  void initState() {
-    super.initState();
-    _fetchCategories();
-  }
-
-  // Obtiene las categorías
-  Future<void> _fetchCategories() async {
-    final QuerySnapshot snapshot = await FirebaseFirestore.instance.collection('categorias').get();
-    final categories = snapshot.docs.map((doc) {
-      return {
-        'id': doc.id, // ID de la categoría como String
-        'nombre': doc['nombre'] as String, // Nombre de la categoría como String
-      };
-    }).toList();
-
-    setState(() {
-      _categories = categories;
-    });
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _priceController.dispose();
+    _dynamicFields.forEach((_, controller) => controller.dispose());
+    super.dispose();
   }
 
   // Selecciona una imagen
   Future<void> _pickImage() async {
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
+      setState(() => _imageFile = File(pickedFile.path));
     }
   }
 
@@ -65,11 +54,7 @@ class AddProductScreenState extends State<ProductsScreen> {
       await ref.putFile(image);
       return await ref.getDownloadURL();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al subir la imagen: ${e.toString()}')),
-        );
-      }
+      _showSnackbar('Error al subir la imagen: ${e.toString()}');
       return null;
     }
   }
@@ -84,6 +69,11 @@ class AddProductScreenState extends State<ProductsScreen> {
         imageUrl = await _uploadImage(_imageFile!);
       }
 
+      Map<String, dynamic> additionalFields = {};
+      _dynamicFields.forEach((key, controller) {
+        additionalFields[key] = controller.text;
+      });
+
       await FirebaseFirestore.instance.collection('productos').add({
         'nombre': _nameController.text,
         'descripcion': _descriptionController.text,
@@ -92,18 +82,66 @@ class AddProductScreenState extends State<ProductsScreen> {
         'imageUrl': imageUrl,
         'empresaId': FirebaseAuth.instance.currentUser?.uid,
         'fechaCreacion': Timestamp.now(),
+        'additionalFields': additionalFields, // Campos dinámicos
       });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Producto agregado con éxito')),
-        );
-
-        Navigator.pop(context); // Regresa a la vista anterior
-      }
+      _showSnackbar('Producto agregado con éxito');
+      Navigator.pop(context);
 
       setState(() => _isLoading = false);
     }
+  }
+
+  void _showSnackbar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  // Obtiene las categorías de Firestore
+  Future<List<Map<String, dynamic>>> _fetchCategories() async {
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('categorias').get();
+
+      if (snapshot.docs.isEmpty) {
+        print("⚠ No hay categorías disponibles.");
+        return [];
+      }
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return {
+          'id': doc.id,
+          'nombre': data['nombre'] ?? 'Sin Nombre',
+          'fields': data.containsKey('fields') &&
+                  data['fields'] is Map<String, dynamic>
+              ? data['fields'] as Map<String, dynamic>
+              : {},
+        };
+      }).toList();
+    } catch (e) {
+      print("❌ Error al obtener categorías: $e");
+      return [];
+    }
+  }
+
+  // Cambia los campos dinámicos según la categoría seleccionada
+  void _onCategoryChanged(String? categoryId, Map<String, dynamic> fields) {
+    setState(() {
+      _selectedCategoryId = categoryId;
+      _categoryFields = fields;
+
+      // ✅ Limpiar controladores anteriores antes de agregar nuevos
+      _dynamicFields.forEach((_, controller) => controller.dispose());
+      _dynamicFields.clear();
+
+      // ✅ Inicializar controladores para los nuevos campos
+      fields.forEach((key, _) {
+        _dynamicFields[key] = TextEditingController();
+      });
+    });
   }
 
   @override
@@ -111,13 +149,9 @@ class AddProductScreenState extends State<ProductsScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF643CB9),
-        iconTheme: const IconThemeData(
-          color: Colors.white, // Color blanco para el ícono de retroceso
-        ),
-        title: const Text(
-          'Agregar Producto',
-          style: TextStyle(color: Colors.white),
-        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Agregar Producto',
+            style: TextStyle(color: Colors.white)),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -125,110 +159,145 @@ class AddProductScreenState extends State<ProductsScreen> {
           key: _formKey,
           child: ListView(
             children: [
-              // Imagen del producto
-              GestureDetector(
-                onTap: _pickImage,
-                child: Container(
-                  height: 150,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey.shade400),
-                  ),
-                  child: _imageFile != null
-                      ? Image.file(_imageFile!, fit: BoxFit.cover)
-                      : const Center(child: Text('Seleccionar Imagen')),
-                ),
-              ),
+              _buildImagePicker(),
               const SizedBox(height: 20),
-              // Campo de texto para el nombre
-              TextFormField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: 'Nombre',
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
-              ),
+              _buildCategoryDropdown(),
               const SizedBox(height: 10),
-              // Campo de texto para la descripción
-              TextFormField(
-                controller: _descriptionController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: 'Descripción',
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
-              ),
+              _buildTextField(controller: _nameController, label: 'Nombre'),
               const SizedBox(height: 10),
-              // Campo de texto para el precio
-              TextFormField(
-                controller: _priceController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Precio',
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
-              ),
+              _buildTextField(
+                  controller: _descriptionController,
+                  label: 'Descripción',
+                  maxLines: 3),
               const SizedBox(height: 10),
-              // Dropdown para seleccionar categoría
-              DropdownButtonFormField<String>(
-                value: _selectedCategoryId,
-                items: _categories.map((category) {
-                  return DropdownMenuItem(
-                    value: category['id'], // ID de la categoría
-                    child: Text(category['nombre'] ?? 'Sin Nombre'),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCategoryId = value;
-                  });
-                },
-                decoration: InputDecoration(
-                  labelText: 'Categoría',
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                validator: (value) => value == null ? 'Seleccione una categoría' : null,
-              ),
+              _buildTextField(
+                  controller: _priceController,
+                  label: 'Precio',
+                  keyboardType: TextInputType.number),
+              const SizedBox(height: 10),
+              _buildDynamicFields(),
               const SizedBox(height: 20),
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : ElevatedButton(
-                      onPressed: _submitProduct,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF643CB4),
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: const Text(
-                        'Agregar Producto',
-                        style: TextStyle(fontSize: 16, color: Colors.white),
-                      ),
-                    ),
+                  : _buildSubmitButton(),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // Widget para seleccionar una imagen
+  Widget _buildImagePicker() {
+    return GestureDetector(
+      onTap: _pickImage,
+      child: Container(
+        height: 150,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.shade400),
+        ),
+        child: _imageFile != null
+            ? Image.file(_imageFile!, fit: BoxFit.cover)
+            : const Center(child: Text('Seleccionar Imagen')),
+      ),
+    );
+  }
+
+  // Widget para los campos de texto reutilizables
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    int maxLines = 1,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
+    );
+  }
+
+  // Widget para el dropdown de categorías
+  Widget _buildCategoryDropdown() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _fetchCategories(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return const Center(child: Text("⚠ Error al cargar categorías"));
+        }
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text("⚠ No hay categorías disponibles"));
+        }
+
+        final categories = snapshot.data!;
+
+        return DropdownButtonFormField<String>(
+          value: _selectedCategoryId,
+          items: categories.map((category) {
+            return DropdownMenuItem(
+              value: category['id'] as String,
+              child: Text(category['nombre']),
+            );
+          }).toList(),
+          onChanged: (value) {
+            final selectedCategory =
+                categories.firstWhere((c) => c['id'] == value);
+            _onCategoryChanged(value, selectedCategory['fields']);
+          },
+          decoration: InputDecoration(
+            labelText: 'Categoría',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          validator: (value) =>
+              value == null ? 'Seleccione una categoría' : null,
+        );
+      },
+    );
+  }
+
+  // Genera los campos dinámicos según la categoría seleccionada
+  Widget _buildDynamicFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: _categoryFields.keys.map((key) {
+        return Padding(
+          padding:
+              const EdgeInsets.only(bottom: 10), // ✅ Espaciado entre los campos
+          child: _buildTextField(controller: _dynamicFields[key]!, label: key),
+        );
+      }).toList(),
+    );
+  }
+
+  // Botón de enviar
+  Widget _buildSubmitButton() {
+    return ElevatedButton(
+      onPressed: _submitProduct,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF643CB4),
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+      child: const Text(
+        'Agregar Producto',
+        style:
+            TextStyle(fontSize: 16, color: Colors.white), // ✅ Corrección aquí
       ),
     );
   }

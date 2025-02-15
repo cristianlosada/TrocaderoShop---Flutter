@@ -7,6 +7,7 @@ import 'package:trocadero_shop/core/constants/app_routes.dart';
 import '../../../core/utils/funtions.dart';
 import '../../../core/utils/show_image.dart';
 import '../../widgets/detail_image_widget.dart';
+import 'products/detail_product.dart';
 import 'products/products.dart';
 import 'companies/other_companies.dart';
 import 'companies/other_companies_products.dart';
@@ -191,12 +192,8 @@ class _EmpresasPageState extends State<EmpresasPage> {
                         margin: const EdgeInsets.symmetric(horizontal: 8.0),
                         child: Column(
                           children: [
-                            CircleAvatar(
-                              radius: 30,
-                              backgroundImage:
-                                  AssetImage('images/assets/$categoryIconUrl'),
-                              backgroundColor: Colors.grey.shade200,
-                            ),
+                            Functions().svgAvatar(
+                                routeIcon: 'images/assets/$categoryIconUrl'),
                             const SizedBox(height: 5),
                             Text(
                               categoryName,
@@ -313,6 +310,28 @@ class _EmpresasPageState extends State<EmpresasPage> {
                                 ),
                               ),
                               const SizedBox(height: 20),
+                              // Botón de ver detalles
+                              ElevatedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ProductDetailScreen(
+                                          productId: productId),
+                                    ),
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF643CB9),
+                                ),
+                                child: const Text(
+                                  'Ver Detalle',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
                               // Botón de editar
                               ElevatedButton(
                                 onPressed: () {

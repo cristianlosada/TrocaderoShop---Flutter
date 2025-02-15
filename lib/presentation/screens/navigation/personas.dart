@@ -12,6 +12,7 @@ import 'cart/cart_screen.dart';
 import 'cart/cart_provider.dart';
 import 'products/detail_product.dart';
 import 'purcaches/person_purchases.dart';
+import 'package:trocadero_shop/core/utils/funtions.dart';
 
 class Personas extends StatelessWidget {
   const Personas({super.key});
@@ -151,12 +152,8 @@ class _PersonasPageState extends State<PersonasPage> {
                         margin: const EdgeInsets.symmetric(horizontal: 8.0),
                         child: Column(
                           children: [
-                            CircleAvatar(
-                              radius: 30,
-                              backgroundImage:
-                                  AssetImage('images/assets/$categoryIconUrl'),
-                              backgroundColor: Colors.grey.shade200,
-                            ),
+                            Functions().svgAvatar(
+                                routeIcon: 'images/assets/$categoryIconUrl'),
                             const SizedBox(height: 5),
                             Text(
                               categoryName,
