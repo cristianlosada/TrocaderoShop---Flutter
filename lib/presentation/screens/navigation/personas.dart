@@ -295,24 +295,36 @@ class _PersonasPageState extends State<PersonasPage> {
                             padding: const EdgeInsets.all(12.0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisSize:
+                                  MainAxisSize.min, // Evita desbordamientos
                               children: [
-                                if (productData['imageUrl'] != null)
-                                  DetailImageWidget(
-                                    imagePath: productData['imageUrl'],
-                                  )
-                                else
-                                  Container(
-                                    height: 80,
-                                    color: Colors.purple.shade50,
-                                    child: Center(
-                                      child: Icon(
-                                        Icons.image,
-                                        color: Colors.purple.shade200,
-                                        size: 40,
-                                      ),
-                                    ),
-                                  ),
+                                // Imagen del producto o placeholder si no hay imagen
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: productData['imageUrl'] != null
+                                      ? SizedBox(
+                                          height:
+                                              80, // Controla la altura de la imagen
+                                          child: DetailImageWidget(
+                                              imagePath:
+                                                  productData['imageUrl']),
+                                        )
+                                      : Container(
+                                          height: 80,
+                                          width: double.infinity,
+                                          color: Colors.purple.shade50,
+                                          child: Center(
+                                            child: Icon(
+                                              Icons.image,
+                                              color: Colors.purple.shade200,
+                                              size: 40,
+                                            ),
+                                          ),
+                                        ),
+                                ),
                                 const SizedBox(height: 8.0),
+
+                                // Nombre del producto
                                 Text(
                                   productData['nombre'] ?? 'Sin nombre',
                                   style: const TextStyle(
@@ -320,8 +332,13 @@ class _PersonasPageState extends State<PersonasPage> {
                                     fontSize: 14,
                                   ),
                                   textAlign: TextAlign.center,
+                                  maxLines:
+                                      1, // Evita que se desborde en varias líneas
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4.0),
+
+                                // Descripción del producto (máximo 50 caracteres)
                                 Text(
                                   productData['descripcion'] != null
                                       ? (productData['descripcion'].length > 50
@@ -330,8 +347,13 @@ class _PersonasPageState extends State<PersonasPage> {
                                       : 'Descripción no disponible',
                                   style: const TextStyle(fontSize: 12),
                                   textAlign: TextAlign.center,
+                                  maxLines:
+                                      2, // Evita desbordamientos en múltiples líneas
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4.0),
+
+                                // Precio del producto
                                 Text(
                                   productData['precio'] != null
                                       ? Functions().formatMoney(
@@ -345,7 +367,8 @@ class _PersonasPageState extends State<PersonasPage> {
                                   ),
                                 ),
                                 const SizedBox(height: 4.0),
-                                // Mostrar el nombre del usuario
+
+                                // Nombre del vendedor
                                 Text(
                                   'Vendido por: $userName',
                                   style: const TextStyle(
@@ -353,28 +376,40 @@ class _PersonasPageState extends State<PersonasPage> {
                                     fontStyle: FontStyle.italic,
                                     color: Colors.purple,
                                   ),
+                                  maxLines: 1, // Evita desbordamientos
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 10),
+
                                 // Botón de ver detalles
-                                ElevatedButton(
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            ProductDetailScreen(
-                                                productId: productId),
+                                SizedBox(
+                                  width: double
+                                      .infinity, // Hace que el botón use todo el ancho
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              ProductDetailScreen(
+                                                  productId: productId),
+                                        ),
+                                      );
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF643CB9),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 10), // Mejor padding
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
-                                    );
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF643CB9),
-                                  ),
-                                  child: const Text(
-                                    'Ver Detalle',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                    ),
+                                    child: const Text(
+                                      'Ver Detalle',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
                                 ),

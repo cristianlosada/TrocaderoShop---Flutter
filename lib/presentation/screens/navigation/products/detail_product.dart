@@ -18,102 +18,147 @@ class ProductDetailScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: _buildAppBar(context, cart),
-      body: FutureProvider<DocumentSnapshot?>(
-        create: (_) => _fetchProduct(productId),
-        initialData: null,
-        catchError: (_, __) => null,
-        child: Consumer<DocumentSnapshot?>(
-          builder: (context, snapshot, _) {
-            if (snapshot == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (!snapshot.exists) {
-              return const Center(child: Text('Producto no encontrado'));
-            }
+      body: FutureBuilder<String>(
+        future: _fetchUserType(), // Obtiene el tipo de usuario
+        builder: (context, userSnapshot) {
+          if (userSnapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-            final productData = snapshot.data() as Map<String, dynamic>;
-            final userId = productData['empresaId'] ?? '';
+          final String userType =
+              userSnapshot.data ?? 'persona'; // 'persona' por defecto
+          final bool isEmpresa =
+              userType == 'empresa'; // Verifica si el usuario es empresa
 
-            return FutureProvider<Map<String, dynamic>>(
-              create: (_) => _fetchCompanyName(userId),
-              initialData: const {'nombre_empresa': 'Desconocido'},
-              child: Consumer<Map<String, dynamic>>(
-                builder: (context, companyData, _) {
-                  final companyName =
-                      companyData['nombre_empresa'] ?? 'Desconocido';
+          return FutureProvider<DocumentSnapshot?>(
+            create: (_) => _fetchProduct(productId),
+            initialData: null,
+            catchError: (_, __) => null,
+            child: Consumer<DocumentSnapshot?>(
+              builder: (context, snapshot, _) {
+                if (snapshot == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.exists) {
+                  return const Center(child: Text('Producto no encontrado'));
+                }
 
-                  // ✅ Manejo de imágenes
-                  List<String> images = [];
-                  if (productData['imageUrl'] is String) {
-                    images = [productData['imageUrl']];
-                  } else if (productData['imageUrl'] is List) {
-                    images = List<String>.from(productData['imageUrl']);
-                  }
+                final productData =
+                    snapshot.data() as Map<String, dynamic>? ?? {};
+                final userId = productData['empresaId'] ?? '';
 
-                  // ✅ Extraer `fields` del producto
-                  Map<String, dynamic> additionalFields =
-                      productData['additionalFields'] ?? {};
+                return FutureProvider<Map<String, dynamic>>(
+                  create: (_) => _fetchCompanyName(userId),
+                  initialData: const {'nombre_empresa': 'Desconocido'},
+                  child: Consumer<Map<String, dynamic>>(
+                    builder: (context, companyData, _) {
+                      final companyName =
+                          companyData['nombre_empresa'] ?? 'Desconocido';
 
-                  return Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: ListView(
-                      children: [
-                        _buildImageCarousel(images, productData),
-                        const SizedBox(height: 20),
-                        _buildProductInfo(productData, companyName),
-                        const SizedBox(height: 20),
-                        _buildAdditionalFields(
-                            additionalFields), // ✅ Mostrar `fields`
-                        const SizedBox(height: 20),
-                        _buildPrice(productData),
-                        const SizedBox(height: 20),
-                        _buildAddToCartButton(
-                            context, productData, cart, companyName),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            );
-          },
-        ),
+                      // ✅ Manejo de imágenes
+                      List<String> images = [];
+                      if (productData['imageUrl'] is String) {
+                        images = [productData['imageUrl']];
+                      } else if (productData['imageUrl'] is List) {
+                        images = List<String>.from(productData['imageUrl']);
+                      }
+
+                      // ✅ Extraer `fields` del producto
+                      Map<String, dynamic> additionalFields =
+                          productData['additionalFields'] ?? {};
+
+                      return Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: ListView(
+                          children: [
+                            _buildImageCarousel(images, productData),
+                            const SizedBox(height: 20),
+                            _buildProductInfo(productData, companyName),
+                            const SizedBox(height: 20),
+                            _buildAdditionalFields(additionalFields),
+                            const SizedBox(height: 20),
+                            _buildPrice(productData),
+                            const SizedBox(height: 20),
+                            if (!isEmpresa) //Ocultar botón si el usuario es empresa
+                              _buildAddToCartButton(
+                                  context, productData, cart, companyName),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          );
+        },
       ),
     );
   }
 
-  // 🔹 Obtiene el tipo de usuario actual
-  Future<DocumentSnapshot?> _fetchUserType() async {
+  // 🔹 Obtiene el tipo de usuario actual desde Firestore
+  Future<String> _fetchUserType() async {
     final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) return null;
-    return FirebaseFirestore.instance.collection('usuarios').doc(userId).get();
+    if (userId == null)
+      return 'persona'; // Si no hay usuario, por defecto es 'persona'
+
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(userId)
+          .get();
+      return userDoc.exists
+          ? (userDoc.data()?['tipo_usuario'] ?? 'persona')
+          : 'persona';
+    } catch (e) {
+      debugPrint("Error al obtener tipo de usuario: $e");
+      return 'persona';
+    }
   }
 
-  // 🔹 AppBar con carrito
+  // 🔹 AppBar con validación para ocultar el botón del carrito si el usuario es empresa
   AppBar _buildAppBar(BuildContext context, CartProvider cart) {
     return AppBar(
       title: const Text('Detalles del Producto',
           style: TextStyle(color: Colors.white)),
       actions: [
-        IconButton(
-          icon: Stack(
-            children: [
-              const Icon(Icons.shopping_cart),
-              if (cart.itemCount > 0)
-                Positioned(
-                  right: 0,
-                  child: CircleAvatar(
-                    radius: 10,
-                    backgroundColor: Colors.red,
-                    child: Text(cart.itemCount.toString(),
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.white)),
-                  ),
-                ),
-            ],
-          ),
-          onPressed: () {
-            Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const CartScreen()));
+        FutureBuilder<String>(
+          future: _fetchUserType(), // Obtiene el tipo de usuario
+          builder: (context, userSnapshot) {
+            if (userSnapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(); // 🔹 No muestra nada mientras carga
+            }
+
+            final String userType =
+                userSnapshot.data ?? 'persona'; // 🔹 'persona' por defecto
+            final bool isEmpresa =
+                userType == 'empresa'; // 🔹 Verifica si el usuario es empresa
+
+            if (isEmpresa)
+              return const SizedBox(); // Si es empresa, no muestra el botón
+
+            return IconButton(
+              icon: Stack(
+                children: [
+                  const Icon(Icons.shopping_cart),
+                  if (cart.itemCount > 0)
+                    Positioned(
+                      right: 0,
+                      child: CircleAvatar(
+                        radius: 10,
+                        backgroundColor: Colors.red,
+                        child: Text(cart.itemCount.toString(),
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.white)),
+                      ),
+                    ),
+                ],
+              ),
+              onPressed: () {
+                Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const CartScreen()));
+              },
+            );
           },
         ),
       ],
@@ -178,7 +223,7 @@ class ProductDetailScreen extends StatelessWidget {
   // 🔹 Mostrar campos adicionales (`fields`)
   Widget _buildAdditionalFields(Map<String, dynamic> additionalFields) {
     if (additionalFields.isEmpty) {
-      return const SizedBox(); // ✅ Si no hay campos, no mostrar nada
+      return const SizedBox(); // Si no hay campos, no mostrar nada
     }
 
     return Column(

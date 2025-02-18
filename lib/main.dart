@@ -91,6 +91,16 @@ class AuthWrapper extends StatelessWidget {
                     userSnapshot.data!.data() as Map<String, dynamic>;
                 final String userType = userData['tipo_usuario'] ?? 'persona';
 
+                // validar si existe la llave is_admin
+                if (userData.containsKey('is_admin') &&
+                    userData['is_admin'] == 1) {
+                  if (userType == 'persona') {
+                    return const Personas();
+                  } else if (userType == 'empresa') {
+                    return const Empresas();
+                  }
+                }
+
                 return FutureBuilder<List>(
                   future: BiometricAuth().authenticateWithBiometrics(),
                   builder: (context, biometricSnapshot) {

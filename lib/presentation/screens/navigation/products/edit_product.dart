@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:intl/intl.dart';
 
 class EditProductScreen extends StatefulWidget {
   final Map<String, dynamic> productData;
@@ -25,7 +26,8 @@ class EditProductScreenState extends State<EditProductScreen> {
   File? _imageFile;
 
   // Mapa de controladores para los campos dinámicos
-  Map<String, TextEditingController> _dynamicFieldControllers = {};
+  final Map<String, TextEditingController> _dynamicFieldControllers = {};
+  Map<String, dynamic> _categoryFields = {};
   Map<String, dynamic> _additionalFields = {};
 
   @override
@@ -37,16 +39,31 @@ class EditProductScreenState extends State<EditProductScreen> {
     _descripcionController.text = widget.productData['descripcion'] ?? '';
     _precioController.text = widget.productData['precio']?.toString() ?? '';
 
+    // Obtener el ID de la categoría
+    String? categoryId = widget.productData['categoriaId'];
+
     // Cargar `additionalFields` si existen
     _additionalFields = widget.productData['additionalFields'] ?? {};
-    _initializeDynamicFieldControllers();
+    // Llamar a la función para obtener los campos de la categoría
+    if (categoryId != null) {
+      _fetchCategoryFields(categoryId).then((fields) {
+        setState(() {
+          _categoryFields = fields;
+          _initializeDynamicFieldControllers();
+        });
+      });
+    } else {
+      _initializeDynamicFieldControllers();
+    }
   }
 
   // Inicializa los controladores para los campos dinámicos
   void _initializeDynamicFieldControllers() {
-    _additionalFields.forEach((key, value) {
-      _dynamicFieldControllers[key] =
-          TextEditingController(text: value.toString());
+    _categoryFields.forEach((key, fieldType) {
+      if (!_dynamicFieldControllers.containsKey(key)) {
+        _dynamicFieldControllers[key] = TextEditingController(
+            text: _additionalFields[key]?.toString() ?? '');
+      }
     });
   }
 
@@ -85,9 +102,16 @@ class EditProductScreenState extends State<EditProductScreen> {
     }
 
     // Recoger los valores actualizados de los campos dinámicos
-    Map<String, dynamic> updatedFields = {};
+    Map<String, dynamic> additionalFields = {};
     _dynamicFieldControllers.forEach((key, controller) {
-      updatedFields[key] = controller.text;
+      final fieldType = _categoryFields[key];
+      if (fieldType == 'number') {
+        additionalFields[key] = double.tryParse(controller.text) ?? 0;
+      } else if (fieldType == 'date') {
+        additionalFields[key] = controller.text;
+      } else {
+        additionalFields[key] = controller.text;
+      }
     });
 
     try {
@@ -99,7 +123,8 @@ class EditProductScreenState extends State<EditProductScreen> {
         'descripcion': _descripcionController.text,
         'precio': double.tryParse(_precioController.text) ?? 0,
         'imageUrl': imageUrl ?? widget.productData['imageUrl'],
-        'additionalFields': updatedFields, // ✅ Actualiza los campos dinámicos
+        'additionalFields':
+            additionalFields, // Actualiza los campos dinámicos
       });
 
       if (mounted) {
@@ -130,8 +155,7 @@ class EditProductScreenState extends State<EditProductScreen> {
             children: [
               _buildImagePicker(),
               const SizedBox(height: 10),
-              _buildTextField(
-                  controller: _nombreController, label: 'Nombre del Producto'),
+              _buildTextField(controller: _nombreController, label: 'Nombre'),
               const SizedBox(height: 10),
               _buildTextField(
                   controller: _descripcionController,
@@ -143,7 +167,7 @@ class EditProductScreenState extends State<EditProductScreen> {
                   label: 'Precio',
                   keyboardType: TextInputType.number),
               const SizedBox(height: 10),
-              _buildDynamicFields(), // ✅ Campos adicionales dinámicos
+              _buildDynamicFields(), // Maneja los campos dinámicos
               const SizedBox(height: 20),
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -186,6 +210,69 @@ class EditProductScreenState extends State<EditProductScreen> {
     );
   }
 
+  // 🔹 Genera los campos dinámicos
+  // 🔹 Genera los campos dinámicos con manejo seguro de tipos
+  Widget _buildDynamicFields() {
+    if (_dynamicFieldControllers.isEmpty) return const SizedBox();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: _dynamicFieldControllers.entries.map((entry) {
+        final fieldType = _categoryFields[entry.key] is String
+            ? _categoryFields[entry.key] as String
+            : 'string'; // Por defecto, es un campo de texto
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _buildFieldByType(fieldType, entry.key, entry.value),
+        );
+      }).toList(),
+    );
+  }
+
+  // 🔹 Maneja el tipo de campo dinámico
+  Widget _buildFieldByType(
+      String fieldType, String label, TextEditingController controller) {
+    switch (fieldType) {
+      case 'date':
+        return _buildDateField(label, controller);
+      case 'number':
+        return _buildTextField(
+            controller: controller,
+            label: label,
+            keyboardType: TextInputType.number);
+      default:
+        return _buildTextField(controller: controller, label: label);
+    }
+  }
+
+  // 🔹 Campo de fecha
+  Widget _buildDateField(String label, TextEditingController controller) {
+    return TextFormField(
+      controller: controller,
+      readOnly: true,
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        suffixIcon: const Icon(Icons.calendar_today, color: Colors.purple),
+      ),
+      onTap: () async {
+        DateTime? pickedDate = await showDatePicker(
+          context: context,
+          initialDate: DateTime.now(),
+          firstDate: DateTime(2000),
+          lastDate: DateTime(2100),
+        );
+
+        if (pickedDate != null) {
+          setState(() {
+            controller.text = DateFormat('dd/MM/yyyy').format(pickedDate);
+          });
+        }
+      },
+    );
+  }
+
   // 🔹 Campos de texto reutilizables
   Widget _buildTextField({
     required TextEditingController controller,
@@ -207,28 +294,6 @@ class EditProductScreenState extends State<EditProductScreen> {
     );
   }
 
-  // 🔹 Genera los campos adicionales dinámicamente
-  Widget _buildDynamicFields() {
-    if (_dynamicFieldControllers.isEmpty) return const SizedBox();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: _dynamicFieldControllers.entries.map((entry) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: TextFormField(
-            controller: entry.value,
-            decoration: InputDecoration(
-              labelText: entry.key,
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
   // 🔹 Botón para guardar cambios
   Widget _buildSubmitButton() {
     return ElevatedButton(
@@ -237,5 +302,21 @@ class EditProductScreenState extends State<EditProductScreen> {
       child: const Text('Guardar Cambios',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
     );
+  }
+
+  Future<Map<String, dynamic>> _fetchCategoryFields(String categoryId) async {
+    try {
+      final categoryDoc = await FirebaseFirestore.instance
+          .collection('categorias')
+          .doc(categoryId)
+          .get();
+
+      if (categoryDoc.exists && categoryDoc.data() != null) {
+        return categoryDoc.data()!['fields'] ?? {}; // Extrae solo los campos
+      }
+    } catch (e) {
+      debugPrint("Error al obtener campos de la categoría: $e");
+    }
+    return {}; // Retorna un mapa vacío si no encuentra nada
   }
 }

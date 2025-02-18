@@ -71,7 +71,15 @@ class AddProductScreenState extends State<ProductsScreen> {
 
       Map<String, dynamic> additionalFields = {};
       _dynamicFields.forEach((key, controller) {
-        additionalFields[key] = controller.text;
+        // print(key);
+        final fieldType = _categoryFields[key];
+        if (fieldType == 'number') {
+          additionalFields[key] = double.tryParse(controller.text) ?? 0;
+        } else if (fieldType == 'date') {
+          additionalFields[key] = controller.text;
+        } else {
+          additionalFields[key] = controller.text;
+        }
       });
 
       await FirebaseFirestore.instance.collection('productos').add({
@@ -122,7 +130,7 @@ class AddProductScreenState extends State<ProductsScreen> {
         };
       }).toList();
     } catch (e) {
-      print("❌ Error al obtener categorías: $e");
+      print("Error al obtener categorías: $e");
       return [];
     }
   }
@@ -133,11 +141,11 @@ class AddProductScreenState extends State<ProductsScreen> {
       _selectedCategoryId = categoryId;
       _categoryFields = fields;
 
-      // ✅ Limpiar controladores anteriores antes de agregar nuevos
+      // Limpiar controladores anteriores antes de agregar nuevos
       _dynamicFields.forEach((_, controller) => controller.dispose());
       _dynamicFields.clear();
 
-      // ✅ Inicializar controladores para los nuevos campos
+      // Inicializar controladores para los nuevos campos
       fields.forEach((key, _) {
         _dynamicFields[key] = TextEditingController();
       });
@@ -270,18 +278,18 @@ class AddProductScreenState extends State<ProductsScreen> {
   }
 
   // Genera los campos dinámicos según la categoría seleccionada
-  Widget _buildDynamicFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: _categoryFields.keys.map((key) {
-        return Padding(
-          padding:
-              const EdgeInsets.only(bottom: 10), // ✅ Espaciado entre los campos
-          child: _buildTextField(controller: _dynamicFields[key]!, label: key),
-        );
-      }).toList(),
-    );
-  }
+  // Widget _buildDynamicFields() {
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: _categoryFields.keys.map((key) {
+  //       return Padding(
+  //         padding:
+  //             const EdgeInsets.only(bottom: 10), // Espaciado entre los campos
+  //         child: _buildTextField(controller: _dynamicFields[key]!, label: key),
+  //       );
+  //     }).toList(),
+  //   );
+  // }
 
   // Botón de enviar
   Widget _buildSubmitButton() {
@@ -297,8 +305,72 @@ class AddProductScreenState extends State<ProductsScreen> {
       child: const Text(
         'Agregar Producto',
         style:
-            TextStyle(fontSize: 16, color: Colors.white), // ✅ Corrección aquí
+            TextStyle(fontSize: 16, color: Colors.white),
       ),
+    );
+  }
+
+  Widget _buildDynamicFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: _categoryFields.entries.map((entry) {
+        final key = entry.key;
+        print(entry.value);
+        final fieldType = entry.value;
+        // ? entry.value.toString()
+        // : 'string'; // 🔹 Verificación más robusta
+        final controller = _dynamicFields[key]!;
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _buildFieldByType(fieldType, key, controller),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildFieldByType(
+      String fieldType, String label, TextEditingController controller) {
+    print(fieldType);
+    switch (fieldType) {
+      case 'date':
+        return _buildDateField(label, controller);
+      case 'number':
+        return _buildTextField(
+            controller: controller,
+            label: label,
+            keyboardType: TextInputType.number);
+      default:
+        return _buildTextField(controller: controller, label: label);
+    }
+  }
+
+  Widget _buildDateField(String label, TextEditingController controller) {
+    return TextFormField(
+      controller: controller,
+      readOnly: true, // Evita edición manual
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        suffixIcon: Icon(Icons.calendar_today, color: Colors.purple),
+      ),
+      onTap: () async {
+        DateTime? pickedDate = await showDatePicker(
+          context: context,
+          initialDate: DateTime.now(),
+          firstDate: DateTime(2000),
+          lastDate: DateTime(2100),
+        );
+
+        if (pickedDate != null) {
+          setState(() {
+            controller.text =
+                "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
+          });
+        }
+      },
     );
   }
 }

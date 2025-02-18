@@ -43,6 +43,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           'nombre_completo': _nameController.text,
           'correo': _emailController.text,
           'tipo_usuario': _userType,
+          'is_admin' : 0,
           'ubicacion': _selectedLocation != null
               ? {
                   'latitude': _selectedLocation!.latitude,
