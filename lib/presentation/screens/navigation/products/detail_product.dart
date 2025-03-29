@@ -52,18 +52,20 @@ class ProductDetailScreen extends StatelessWidget {
                   initialData: const {'nombre_empresa': 'Desconocido'},
                   child: Consumer<Map<String, dynamic>>(
                     builder: (context, companyData, _) {
-                      final companyName =
-                          companyData['nombre_empresa'] ?? 'Desconocido';
+                      // Asegúrate de que companyData sea del tipo esperado
+                      final companyName = (companyData is Map<String, dynamic>)
+                          ? companyData['nombre_empresa'] ?? 'Desconocido'
+                          : 'Desconocido';
 
-                      // ✅ Manejo de imágenes
+                      // Manejo de imágenes
                       List<String> images = [];
                       if (productData['imageUrl'] is String) {
                         images = [productData['imageUrl']];
-                      } else if (productData['imageUrl'] is List) {
-                        images = List<String>.from(productData['imageUrl']);
+                      } else if (productData['imageUrls'] is List) {
+                        images = List<String>.from(productData['imageUrls']);
                       }
 
-                      // ✅ Extraer `fields` del producto
+                      // Extraer `fields` del producto
                       Map<String, dynamic> additionalFields =
                           productData['additionalFields'] ?? {};
 
@@ -79,7 +81,7 @@ class ProductDetailScreen extends StatelessWidget {
                             const SizedBox(height: 20),
                             _buildPrice(productData),
                             const SizedBox(height: 20),
-                            if (!isEmpresa) //Ocultar botón si el usuario es empresa
+                            if (!isEmpresa) // Ocultar botón si el usuario es empresa
                               _buildAddToCartButton(
                                   context, productData, cart, companyName),
                           ],
@@ -96,7 +98,7 @@ class ProductDetailScreen extends StatelessWidget {
     );
   }
 
-  // 🔹 Obtiene el tipo de usuario actual desde Firestore
+  // Obtiene el tipo de usuario actual desde Firestore
   Future<String> _fetchUserType() async {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null)
@@ -116,26 +118,23 @@ class ProductDetailScreen extends StatelessWidget {
     }
   }
 
-  // 🔹 AppBar con validación para ocultar el botón del carrito si el usuario es empresa
+  // AppBar con validación para ocultar el botón del carrito si el usuario es empresa
   AppBar _buildAppBar(BuildContext context, CartProvider cart) {
     return AppBar(
       title: const Text('Detalles del Producto',
           style: TextStyle(color: Colors.white)),
       actions: [
         FutureBuilder<String>(
-          future: _fetchUserType(), // Obtiene el tipo de usuario
+          future: _fetchUserType(),
           builder: (context, userSnapshot) {
             if (userSnapshot.connectionState == ConnectionState.waiting) {
-              return const SizedBox(); // 🔹 No muestra nada mientras carga
+              return const SizedBox(); // No muestra nada mientras carga
             }
 
-            final String userType =
-                userSnapshot.data ?? 'persona'; // 🔹 'persona' por defecto
-            final bool isEmpresa =
-                userType == 'empresa'; // 🔹 Verifica si el usuario es empresa
+            final String userType = userSnapshot.data ?? 'persona';
+            final bool isEmpresa = userType == 'empresa';
 
-            if (isEmpresa)
-              return const SizedBox(); // Si es empresa, no muestra el botón
+            if (isEmpresa) return const SizedBox();
 
             return IconButton(
               icon: Stack(
@@ -167,7 +166,7 @@ class ProductDetailScreen extends StatelessWidget {
     );
   }
 
-  // 🔹 Carrusel de imágenes
+  // Carrusel de imágenes
   Widget _buildImageCarousel(
       List<String> images, Map<String, dynamic> productData) {
     return SizedBox(
@@ -176,7 +175,7 @@ class ProductDetailScreen extends StatelessWidget {
         itemCount: images.isNotEmpty ? images.length : 1,
         itemBuilder: (context, index) {
           return images.isNotEmpty
-              ? DetailImageWidget(imagePath: images[index])
+              ? ImageCarouselWithDetailView(images: images)
               : Image.asset('images/assets/LogoTrocadero.png',
                   fit: BoxFit.cover, width: double.infinity);
         },
@@ -184,7 +183,7 @@ class ProductDetailScreen extends StatelessWidget {
     );
   }
 
-  // 🔹 Información del producto
+  // Información del producto
   Widget _buildProductInfo(
       Map<String, dynamic> productData, String companyName) {
     return Column(
@@ -208,7 +207,7 @@ class ProductDetailScreen extends StatelessWidget {
     );
   }
 
-  // 🔹 Mostrar precio
+  // Mostrar precio
   Widget _buildPrice(Map<String, dynamic> productData) {
     return Text(
       productData['precio'] != null
@@ -220,10 +219,10 @@ class ProductDetailScreen extends StatelessWidget {
     );
   }
 
-  // 🔹 Mostrar campos adicionales (`fields`)
+  // Mostrar campos adicionales
   Widget _buildAdditionalFields(Map<String, dynamic> additionalFields) {
     if (additionalFields.isEmpty) {
-      return const SizedBox(); // Si no hay campos, no mostrar nada
+      return const SizedBox();
     }
 
     return Column(
@@ -240,7 +239,7 @@ class ProductDetailScreen extends StatelessWidget {
     );
   }
 
-  // 🔹 Botón para agregar al carrito (Restringido para empresas)
+  // Botón para agregar al carrito (Restringido para empresas)
   Widget _buildAddToCartButton(BuildContext context,
       Map<String, dynamic> productData, CartProvider cart, String companyName) {
     return ElevatedButton(
@@ -269,7 +268,7 @@ class ProductDetailScreen extends StatelessWidget {
     );
   }
 
-  // 🔹 Función para obtener detalles del producto
+  // Función para obtener detalles del producto
   Future<DocumentSnapshot?> _fetchProduct(String productId) async {
     try {
       return await FirebaseFirestore.instance
@@ -282,7 +281,7 @@ class ProductDetailScreen extends StatelessWidget {
     }
   }
 
-  // 🔹 Función para obtener la empresa del vendedor
+  // Función para obtener la empresa del vendedor
   Future<Map<String, dynamic>> _fetchCompanyName(String userId) async {
     try {
       final userDoc = await FirebaseFirestore.instance

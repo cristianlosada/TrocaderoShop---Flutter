@@ -265,18 +265,44 @@ class _EmpresasPageState extends State<EmpresasPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              if (productData['imageUrl'] != null)
-                                DetailImageWidget(
-                                  imagePath: productData['imageUrl'],
+                              if (productData['imageUrls'] != null &&
+                                  productData['imageUrls'] is List)
+                                // Si hay una lista de imágenes
+                                SizedBox(
+                                  height: 200, // Ajusta la altura del carrusel
+                                  child: ListView.builder(
+                                    scrollDirection: Axis
+                                        .horizontal, // Permite el desplazamiento horizontal
+                                    itemCount: productData['imageUrls'].length,
+                                    itemBuilder: (context, index) {
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8.0),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                              15), // Bordes redondeados para las imágenes
+                                          child: DetailImageWidget(
+                                            imagePath: productData['imageUrls'][
+                                                index], // URL de la imagen en la lista
+                                            height:
+                                                150, // Tamaño de las imágenes en el carrusel
+                                            width:
+                                                150, // Tamaño de las imágenes en el carrusel
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 )
                               else
+                                // Si no hay imágenes o no es una lista
                                 Container(
                                   height: 100,
                                   color: Colors.purple.shade50,
-                                  child: Center(
+                                  child: const Center(
                                     child: Icon(
                                       Icons.image,
-                                      color: Colors.purple.shade200,
+                                      color: Color.fromARGB(255, 206, 147, 216),
                                       size: 50,
                                     ),
                                   ),

@@ -19,7 +19,7 @@ class AddProductScreenState extends State<ProductsScreen> {
   final TextEditingController _priceController = TextEditingController();
 
   String? _selectedCategoryId;
-  File? _imageFile;
+  List<File> _imageFiles = [];
   bool _isLoading = false;
   final ImagePicker _picker = ImagePicker();
 
@@ -37,26 +37,32 @@ class AddProductScreenState extends State<ProductsScreen> {
   }
 
   // Selecciona una imagen
-  Future<void> _pickImage() async {
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() => _imageFile = File(pickedFile.path));
+  Future<void> _pickImages() async {
+    final pickedFiles = await _picker.pickMultiImage();
+    if (pickedFiles != null) {
+      setState(() {
+        _imageFiles = pickedFiles.map((file) => File(file.path)).toList();
+      });
     }
   }
 
   // Sube la imagen a Firebase Storage y obtiene la URL
-  Future<String?> _uploadImage(File image) async {
+  Future<List<String?>> _uploadImages(List<File> images) async {
+    List<String?> imageUrls = [];
     try {
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('product_images')
-          .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await ref.putFile(image);
-      return await ref.getDownloadURL();
+      for (var image in images) {
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('product_images')
+            .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
+        await ref.putFile(image);
+        final url = await ref.getDownloadURL();
+        imageUrls.add(url);
+      }
     } catch (e) {
-      _showSnackbar('Error al subir la imagen: ${e.toString()}');
-      return null;
+      _showSnackbar('Error al subir las imágenes: ${e.toString()}');
     }
+    return imageUrls;
   }
 
   // Envia los datos del producto a Firestore
@@ -64,14 +70,13 @@ class AddProductScreenState extends State<ProductsScreen> {
     if (_formKey.currentState?.validate() ?? false) {
       setState(() => _isLoading = true);
 
-      String? imageUrl;
-      if (_imageFile != null) {
-        imageUrl = await _uploadImage(_imageFile!);
+      List<String?> imageUrls = [];
+      if (_imageFiles.isNotEmpty) {
+        imageUrls = await _uploadImages(_imageFiles);
       }
 
       Map<String, dynamic> additionalFields = {};
       _dynamicFields.forEach((key, controller) {
-        // print(key);
         final fieldType = _categoryFields[key];
         if (fieldType == 'number') {
           additionalFields[key] = double.tryParse(controller.text) ?? 0;
@@ -87,10 +92,10 @@ class AddProductScreenState extends State<ProductsScreen> {
         'descripcion': _descriptionController.text,
         'precio': double.parse(_priceController.text),
         'categoriaId': _selectedCategoryId,
-        'imageUrl': imageUrl,
+        'imageUrls': imageUrls, // Guardar todas las URLs de las imágenes
         'empresaId': FirebaseAuth.instance.currentUser?.uid,
         'fechaCreacion': Timestamp.now(),
-        'additionalFields': additionalFields, // Campos dinámicos
+        'additionalFields': additionalFields,
       });
 
       _showSnackbar('Producto agregado con éxito');
@@ -198,7 +203,7 @@ class AddProductScreenState extends State<ProductsScreen> {
   // Widget para seleccionar una imagen
   Widget _buildImagePicker() {
     return GestureDetector(
-      onTap: _pickImage,
+      onTap: _pickImages,
       child: Container(
         height: 150,
         decoration: BoxDecoration(
@@ -206,9 +211,19 @@ class AddProductScreenState extends State<ProductsScreen> {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.grey.shade400),
         ),
-        child: _imageFile != null
-            ? Image.file(_imageFile!, fit: BoxFit.cover)
-            : const Center(child: Text('Seleccionar Imagen')),
+        child: _imageFiles.isNotEmpty
+            ? GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3, crossAxisSpacing: 4, mainAxisSpacing: 4),
+                itemCount: _imageFiles.length,
+                itemBuilder: (context, index) {
+                  return Image.file(
+                    _imageFiles[index],
+                    fit: BoxFit.cover,
+                  );
+                },
+              )
+            : const Center(child: Text('Seleccionar Imagenes')),
       ),
     );
   }
@@ -304,8 +319,7 @@ class AddProductScreenState extends State<ProductsScreen> {
       ),
       child: const Text(
         'Agregar Producto',
-        style:
-            TextStyle(fontSize: 16, color: Colors.white),
+        style: TextStyle(fontSize: 16, color: Colors.white),
       ),
     );
   }
