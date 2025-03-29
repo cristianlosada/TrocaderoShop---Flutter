@@ -14,7 +14,6 @@ import 'package:trocadero_shop/presentation/screens/navigation/cart/cart_provide
 import 'package:trocadero_shop/core/utils/biometric_auth.dart'; // Clase para la autenticación biométrica
 
 void main() async {
-  // await dotenv.load();
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   runApp(MultiProvider(

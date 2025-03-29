@@ -121,9 +121,7 @@ class OtherCompanyScreen extends State<OtherCompaniesScreen> {
 
   // Obtener la ruta entre dos puntos usando la Google Directions API
   Future<void> _getRoute(LatLng origin, LatLng destination) async {
-    // print(dotenv.env['GOOGLE_MAPS_API_KEY']);
-    // final String apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'] ??
-    const String apiKey = 'AIzaSyA9YtzACe5tBV4rQPsGfHyW7rr2dSwxx7Q';
+    final String apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'] ?? '';
     final Uri url = Uri.parse(
       'https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&key=$apiKey',
     );
